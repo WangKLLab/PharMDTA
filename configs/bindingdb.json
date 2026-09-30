@@ -1,0 +1,48 @@
+{
+  "source": "PharMDTA_Manuscript_with_Appendix.docx, Appendix Table A2",
+  "dataset": "bindingdb",
+  "reported_best_epoch": 68,
+  "data": {
+    "max_seq_len": 128,
+    "max_protein_seq_len": 1000,
+    "split_seed": 42
+  },
+  "model": {
+    "n_embd": 384,
+    "n_head": 4,
+    "dropout": 0.1,
+    "affinity_dropout": 0.1,
+    "encoder_layers": 8,
+    "molecule_encoder_layers": 8,
+    "molecule_transformer_heads": 8,
+    "protein_transformer_layers": 4,
+    "protein_transformer_heads": 8,
+    "cross_attention_layers": 3,
+    "pocket_in_dim": 2568,
+    "pocket_node_dim": 128,
+    "pocket_input_proj_dim": 384,
+    "pocket_hidden_dim": 384,
+    "pocket_layers": 3,
+    "pocket_residue_feature_dim": 28,
+    "protein_cached_embedding_dim": 2560,
+    "pocket_transformer_heads": 4
+  },
+  "training": {
+    "optimizer": "AdamW",
+    "loss": "standardized_mse",
+    "betas": [
+      0.9,
+      0.95
+    ],
+    "lr": 5e-05,
+    "weight_decay": 0.075,
+    "batch_size": 128,
+    "warmup_steps": 3500,
+    "epochs": 100,
+    "patience": 10,
+    "min_delta": 0,
+    "grad_clip": 1.0,
+    "amp": true,
+    "seed": 42
+  }
+}

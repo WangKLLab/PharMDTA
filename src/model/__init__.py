@@ -1,0 +1,1 @@
+"""PharMacyDTA manuscript implementation."""
