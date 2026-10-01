@@ -46,37 +46,6 @@ python -m unittest discover -s tests -v
 
 Direct dependencies are pinned; transitive dependencies are resolved by the package managers. Archive `conda list --explicit` and `python -m pip freeze` with published experiment results to record the exact installed environment.
 
-## Recorded software and hardware
-
-The following versions were queried from the environments used for offline feature generation and dataset/model smoke validation on **2 October 2026**. The installation specification above is maintained separately from these recorded environments.
-
-| Software | Pocket generation and model validation | ESM-C cache generation |
-| --- | --- | --- |
-| Python | 3.10.18 | 3.12.11 |
-| PyTorch | 2.6.0+cu124 | 2.6.0+cu124 |
-| NumPy | 1.23.5 | 2.4.6 |
-| pandas | 2.2.3 | 3.0.3 |
-| PyTorch Geometric | 2.5.3 | — |
-| Biopython | 1.85 | — |
-| RDKit | 2025.09.6 | — |
-| tqdm | 4.70.0 | — |
-| Transformers | — | 4.57.6, local ESM-C-enabled implementation |
-| Accelerate | — | 1.14.0 |
-| Safetensors | — | 0.8.0 |
-
-A dash indicates that the package was not used in that stage. Pocket preprocessing used **fpocket 4.0** and **DSSP (`mkdssp`) 4.0.4**. ESM-C inference requires the ESM-C-enabled Transformers implementation used with the local checkpoint.
-
-| Hardware / system | Recorded value |
-| --- | --- |
-| GPUs | 2 × NVIDIA GeForce RTX 4090 D, 24 GB VRAM per GPU |
-| NVIDIA driver | 550.144.03 |
-| PyTorch CUDA runtime | 12.4 |
-| cuDNN | 9.1.0 |
-| Operating system | Ubuntu 22.04.5 LTS |
-| Linux kernel | 6.8.0-138-generic |
-
-ESM-C cache generation ran across both GPUs using BF16 inference and saved FP16 residue tensors. Pocket construction used CPU multiprocessing with up to 48 workers. Model smoke validation used CUDA FP16 autocast, with FP32 attention normalization.
-
 ## Data and feature requirements
 
 Local split CSVs and generated feature artifacts are excluded from Git and are not bundled with this repository. Supply the benchmark split files described by the dataset manifests before generating features or starting training.
