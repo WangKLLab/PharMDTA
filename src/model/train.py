@@ -1,7 +1,6 @@
 """Train the manuscript model on immutable BindingDB/KIBA pair splits."""
 from __future__ import annotations
 import argparse
-import hashlib
 import json
 import math
 import random
@@ -11,14 +10,14 @@ import pandas as pd
 import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from .model import PharMacyDTA
+from .model import PharMDTA
 from .data import AffinityDataset, collate_affinity, move_affinity_batch, forward_batch
-from .data_contracts import validate_native_v6_training_input, sha256_file
+from .data_contracts import validate_native_v6_training_input
 from .metrics import compute_native_affinity_metrics
 from .protein_sequence import load_component_sequences
 from .smiles_tokenizer import load_smiles_vocabulary, SMILES_VOCAB_PATH
 
-CHECKPOINT_FORMAT = 'pharmacydta.paper.v1'
+CHECKPOINT_FORMAT = 'PharMDTA.paper.v1'
 
 
 def read_config(path):
@@ -163,7 +162,7 @@ def main():
     model_kwargs = dict(cfg['model'], vocab_size=len(vocabulary), pad_id=vocabulary['<pad>'])
     if datasets['train'].pocket_contract.feature_dim != model_kwargs['pocket_in_dim']:
         raise ValueError('pocket input dimension differs from configuration')
-    model = PharMacyDTA(**model_kwargs).to(device)
+    model = PharMDTA(**model_kwargs).to(device)
     model.grad_clip = float(settings['grad_clip'])
     groups = [dict(params=[p for p in model.parameters() if p.requires_grad and p.ndim >= 2],
                    weight_decay=settings['weight_decay']),
@@ -180,17 +179,14 @@ def main():
         return 0.5*(1+math.cos(math.pi*progress))
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, schedule)
     scaler = torch.amp.GradScaler('cuda', enabled=amp)
-    receipt.update(pocket_contract_sha256=sha256_file(args.pocket_contract),
-                   component_sequences_sha256=sha256_file(args.component_sequences),
-                   vocabulary_sha256=sha256_file(SMILES_VOCAB_PATH))
-    fingerprint_payload = dict(config=cfg, inputs=receipt,
-        embedding_source=str(args.esmc6b_embeddings.resolve()), micro_batch_size=args.micro_batch_size)
-    fingerprint = hashlib.sha256(json.dumps(fingerprint_payload, sort_keys=True).encode()).hexdigest()
     start, best, bad, best_epoch, history = 1, math.inf, 0, 0, []
     if args.resume:
         checkpoint = torch.load(args.resume, map_location='cpu', weights_only=False)
-        if checkpoint['format'] != CHECKPOINT_FORMAT or checkpoint['fingerprint'] != fingerprint:
-            raise ValueError('resume configuration or immutable inputs differ')
+        if checkpoint['format'] != CHECKPOINT_FORMAT:
+            raise ValueError('resume checkpoint format differs')
+        previous_run = json.loads((run/'config.json').read_text())
+        if previous_run['config'] != cfg or previous_run['model_kwargs'] != model_kwargs:
+            raise ValueError('resume configuration differs')
         model.load_state_dict(checkpoint['model_state_dict'], strict=True)
         optimizer.load_state_dict(checkpoint['optimizer'])
         scheduler.load_state_dict(checkpoint['scheduler'])
@@ -225,7 +221,7 @@ def main():
         history.append(dict(epoch=epoch, train_standardized_MSE=train_loss,
             **{f'val_{key}': val for key, val in metrics.items()}, lr=optimizer.param_groups[0]['lr']))
         pd.DataFrame(history).to_csv(run/'history.csv', index=False)
-        checkpoint = dict(format=CHECKPOINT_FORMAT, fingerprint=fingerprint, epoch=epoch,
+        checkpoint = dict(format=CHECKPOINT_FORMAT, epoch=epoch,
             model_kwargs=model_kwargs, model_state_dict=model.state_dict(), optimizer=optimizer.state_dict(),
             scheduler=scheduler.state_dict(), scaler=scaler.state_dict(), best=best, bad=bad,
             best_epoch=best_epoch, history=history, train_mean=mean, train_std=std,

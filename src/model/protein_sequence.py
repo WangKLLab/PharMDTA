@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import math
 from pathlib import Path
@@ -37,14 +36,6 @@ def normalize_sequence(value: object) -> str:
     return sequence
 
 
-def _sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
-
-
 def load_component_sequences(
     path: str | Path,
 ) -> tuple[dict[str, str], dict[str, Any]]:
@@ -70,7 +61,6 @@ def load_component_sequences(
         mapping[key] = sequence
     return mapping, {
         "path": str(source),
-        "sha256": _sha256_file(source),
         "rows": int(len(frame)),
         "unique_components": int(len(mapping)),
     }

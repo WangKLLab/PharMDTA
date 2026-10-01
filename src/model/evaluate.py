@@ -6,7 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 import numpy as np
 import torch
-from .model import PharMacyDTA
+from .model import PharMDTA
 from .data import collate_affinity, move_affinity_batch, forward_batch
 from .train import CHECKPOINT_FORMAT, make_dataset, make_loader, evaluate, atomic_json
 from .protein_sequence import load_component_sequences
@@ -38,7 +38,7 @@ def main():
     vocabulary = load_smiles_vocabulary(SMILES_VOCAB_PATH)
     dataset = make_dataset(paths.data_dir/'splits'/f'{args.split}.csv', run['config'], paths, components, vocabulary)
     device = torch.device(args.device)
-    model = PharMacyDTA(**checkpoint['model_kwargs']).to(device)
+    model = PharMDTA(**checkpoint['model_kwargs']).to(device)
     model.load_state_dict(checkpoint['model_state_dict'], strict=True)
     mean, std = checkpoint['train_mean'], checkpoint['train_std']
     amp = bool(run['config']['training']['amp']) and device.type == 'cuda'

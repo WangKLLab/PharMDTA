@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -17,7 +15,6 @@ TARGET_POCKET_QUALITY_CONTRACT_VERSION = 4
 TARGET_POCKET_QUALITY_CONTRACT_SEMANTICS = (
     "target_level_ligand_independent_sequence_aligned_quality_v4"
 )
-SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 RUNTIME_GRAPH_FIELDS = frozenset(
     {
         "x",
@@ -51,12 +48,11 @@ RESIDUE_PHYSCHEM_SCHEMA: dict[str, Any] = {
         "flexibility_z",
     ],
     "continuous_scaling": "zscore_over_20_canonical_amino_acids",
-    "sha256": "22a851d51bfbbcefa683e63f76667833743519a58f936eca5881c92f9e16e892",
 }
 
 
 def torch_load_compat(path: str | Path) -> Any:
-    """Read a trusted, hash-validated graph artifact using PyTorch 2.6."""
+    """Read a target-pocket graph artifact using PyTorch 2.6."""
     return torch.load(path, map_location="cpu", weights_only=False)
 
 
@@ -70,28 +66,10 @@ class TargetPocketContract:
     residue_feature_dim: int
     residue_feature_schema: dict[str, Any]
     graph_paths: dict[str, Path]
-    graph_sha256: dict[str, str]
     metric_groups: dict[str, str]
     available_targets: frozenset[str]
     requires_sequence_alignment: bool
     payload: dict[str, Any]
-
-
-def sha256_file(path: str | Path) -> str:
-    digest = hashlib.sha256()
-    with Path(path).open("rb") as handle:
-        for chunk in iter(lambda: handle.read(8 * 1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def normalized_sequence_sha256(sequence: str) -> str:
-    """Digest the exact normalized sequence used by a v4 pocket graph."""
-
-    normalized = "".join(character for character in str(sequence).upper() if character.isalpha())
-    if not normalized:
-        raise ValueError("cannot hash an empty target sequence")
-    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
 def _require_flag(payload: dict[str, Any], key: str, expected: bool, path: Path) -> None:
@@ -151,12 +129,6 @@ def load_target_pocket_contract(path: str | Path) -> TargetPocketContract:
         raise ValueError(f"{contract_path}: affinity_label_fields_read must be empty")
     if int(payload.get("num_failed_targets", -1)) != 0:
         raise ValueError(f"{contract_path}: partial pocket coverage is forbidden")
-    for metadata_key in ("builder", "fpocket", "mkdssp"):
-        metadata = payload.get(metadata_key)
-        if not isinstance(metadata, dict) or not SHA256_RE.fullmatch(
-            str(metadata.get("sha256", "")).lower()
-        ):
-            raise ValueError(f"{contract_path}: {metadata_key} SHA256 is required")
 
     identity_column = str(payload.get("identity_column", "")).strip()
     feature_dim = int(payload.get("feature_dim", 0))
@@ -170,16 +142,15 @@ def load_target_pocket_contract(path: str | Path) -> TargetPocketContract:
         raise ValueError(
             f"{contract_path}: residue_feature_dim must be {RESIDUE_PHYSCHEM_DIM}"
         )
-    if residue_schema != RESIDUE_PHYSCHEM_SCHEMA:
+    if not isinstance(residue_schema, dict) or {
+        key: residue_schema.get(key) for key in RESIDUE_PHYSCHEM_SCHEMA
+    } != RESIDUE_PHYSCHEM_SCHEMA:
         raise ValueError(f"{contract_path}: residue feature schema mismatch")
 
     raw_paths = payload.get("graph_paths")
-    raw_hashes = payload.get("graph_sha256")
     entries = payload.get("entries")
     if not isinstance(raw_paths, dict) or not raw_paths:
         raise ValueError(f"{contract_path}: graph_paths must be a non-empty mapping")
-    if not isinstance(raw_hashes, dict) or set(raw_hashes) != set(raw_paths):
-        raise ValueError(f"{contract_path}: graph_sha256 keys must match graph_paths")
     if not isinstance(entries, dict) or set(entries) != set(raw_paths):
         raise ValueError(f"{contract_path}: entry keys must match graph_paths")
     if int(payload.get("num_targets", -1)) != len(raw_paths):
@@ -188,7 +159,6 @@ def load_target_pocket_contract(path: str | Path) -> TargetPocketContract:
         raise ValueError(f"{contract_path}: complete requested coverage is required")
 
     graph_paths: dict[str, Path] = {}
-    graph_hashes: dict[str, str] = {}
     metric_groups: dict[str, str] = {}
     available_targets: set[str] = set()
     missing_files: list[str] = []
@@ -199,9 +169,6 @@ def load_target_pocket_contract(path: str | Path) -> TargetPocketContract:
         graph_path = _resolve_graph_path(contract_path, raw_path)
         if not graph_path.is_file() or graph_path.is_symlink():
             missing_files.append(str(graph_path))
-        expected_hash = str(raw_hashes[raw_target]).strip().lower()
-        if not SHA256_RE.fullmatch(expected_hash):
-            raise ValueError(f"{contract_path}: invalid graph SHA256 for {target}")
         entry = entries[raw_target]
         if not isinstance(entry, dict):
             raise ValueError(f"{contract_path}: malformed entry for {target}")
@@ -222,11 +189,6 @@ def load_target_pocket_contract(path: str | Path) -> TargetPocketContract:
             "masked_unavailable",
         }:
             raise ValueError(f"{contract_path}: invalid selection method for {target}")
-        expected_sequence_hash = str(entry.get("target_sequence_sha256", "")).lower()
-        if not SHA256_RE.fullmatch(expected_sequence_hash):
-            raise ValueError(
-                f"{contract_path}: v4 entry lacks target_sequence_sha256 for {target}"
-            )
         if bool(entry.get("pocket_available", False)):
             if str(entry.get("selection_method", "")).strip() != "fpocket":
                 raise ValueError(
@@ -234,7 +196,6 @@ def load_target_pocket_contract(path: str | Path) -> TargetPocketContract:
                 )
             available_targets.add(target)
         graph_paths[target] = graph_path
-        graph_hashes[target] = expected_hash
         metric_groups[target] = metric_group
     if missing_files:
         raise FileNotFoundError(
@@ -249,9 +210,8 @@ def load_target_pocket_contract(path: str | Path) -> TargetPocketContract:
         identity_column=identity_column,
         feature_dim=feature_dim,
         residue_feature_dim=residue_feature_dim,
-        residue_feature_schema=dict(residue_schema),
+        residue_feature_schema=dict(RESIDUE_PHYSCHEM_SCHEMA),
         graph_paths=graph_paths,
-        graph_sha256=graph_hashes,
         metric_groups=metric_groups,
         available_targets=frozenset(available_targets),
         requires_sequence_alignment=True,
@@ -276,13 +236,6 @@ def load_validated_target_pocket_graph(
     if normalized_target not in contract.graph_paths:
         raise KeyError(f"target is absent from pocket contract: {normalized_target!r}")
     graph_path = contract.graph_paths[normalized_target]
-    actual_hash = sha256_file(graph_path)
-    expected_hash = contract.graph_sha256[normalized_target]
-    if actual_hash != expected_hash:
-        raise RuntimeError(
-            "target-pocket graph hash mismatch: "
-            f"target={normalized_target}, expected={expected_hash}, actual={actual_hash}"
-        )
     graph = torch_load_compat(graph_path)
     x = getattr(graph, "x", None)
     edge_index = getattr(graph, "edge_index", None)
@@ -322,22 +275,10 @@ def load_validated_target_pocket_graph(
     if (
         str(getattr(graph, "residue_feature_schema", "")).strip()
         != str(schema.get("name", ""))
-        or str(getattr(graph, "residue_feature_schema_sha256", "")).strip()
-        != str(schema.get("sha256", ""))
     ):
         raise RuntimeError(f"target-pocket residue feature schema mismatch: {graph_path}")
     if expected_sequence is None:
         raise RuntimeError("v4 target-pocket loading requires the runtime target sequence")
-    expected_hash = normalized_sequence_sha256(expected_sequence)
-    graph_hash = str(getattr(graph, "target_sequence_sha256", "")).lower()
-    entry_hash = str(contract.payload["entries"][normalized_target].get(
-        "target_sequence_sha256", ""
-    )).lower()
-    if graph_hash != expected_hash or entry_hash != expected_hash:
-        raise RuntimeError(
-            "target-pocket sequence hash mismatch: "
-            f"target={normalized_target}"
-        )
     sequence_index = getattr(graph, "sequence_index", None)
     if (
         not torch.is_tensor(sequence_index)

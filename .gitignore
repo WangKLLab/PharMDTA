@@ -14,3 +14,16 @@ runs/
 # Keep large training splits local; include the component sequence catalog.
 /data/bindingdb/splits/
 /data/kiba/splits/
+
+# Generated offline features and process logs.
+/data/features/
+
+# Additional model artifacts, evaluation outputs, and transient files.
+*.pickle
+*.safetensors
+*.ckpt
+*.onnx
+*.log
+*.tmp
+/results/
+/logs/

@@ -9,7 +9,6 @@ calculation, or pair-specific interaction record.
 
 from __future__ import annotations
 
-import hashlib
 from functools import lru_cache
 from pathlib import Path
 
@@ -44,14 +43,6 @@ def _base_features_path() -> Path:
     if not path.is_file():
         raise RuntimeError(f"RDKit BaseFeatures definition is missing: {path}")
     return path
-
-
-def _sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 @lru_cache(maxsize=1)
@@ -178,5 +169,4 @@ def pharmacophore_contract() -> dict[str, object]:
         "feature_definition": "rdkit_BaseFeatures.fdef_plus_local_atom_context",
         "formal_charge_scaled": "clip(formal_charge,-2,2)/2",
         "rdkit_version": str(rdBase.rdkitVersion),
-        "base_features_fdef_sha256": _sha256_file(definition_path),
     }

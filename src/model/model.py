@@ -1,4 +1,4 @@
-"""PharMacyDTA: the manuscript's ligand, target, and shared-relation model."""
+"""PharMDTA: the manuscript's ligand, target, and shared-relation model."""
 from __future__ import annotations
 from dataclasses import dataclass
 from types import SimpleNamespace
@@ -97,10 +97,14 @@ class AlignedBidirectionalCoAttention(nn.Module):
     @staticmethod
     def _masked_softmax(scores: Tensor, valid: Tensor, *, dim: int) -> Tensor:
         mask = valid.unsqueeze(1)
+        # Keep normalization in FP32: 1e-12 underflows in FP16, making
+        # fully masked padding rows divide zero by zero. Finite masked
+        # scores also keep softmax and its backward pass defined on those rows.
+        scores = scores.float()
         masked = scores.masked_fill(~mask, torch.finfo(scores.dtype).min)
-        weights = torch.softmax(masked, dim=dim)
-        weights = weights.masked_fill(~mask, 0.0)
-        return weights / weights.sum(dim=dim, keepdim=True).clamp_min(1e-12)
+        weights = torch.softmax(masked, dim=dim).masked_fill(~mask, 0.0)
+        denominator = weights.sum(dim=dim, keepdim=True)
+        return weights / denominator.clamp_min(torch.finfo(weights.dtype).tiny)
 
     def forward(self, atom_states: Tensor, atom_valid: Tensor, residue_states: Tensor, residue_valid: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
         if atom_states.shape[:2] != atom_valid.shape:
@@ -121,8 +125,8 @@ class AlignedBidirectionalCoAttention(nn.Module):
         residue_to_atom_heads = self._masked_softmax(relation.transpose(-2, -1), pair_valid.transpose(1, 2), dim=-1)
         residue_value = self._split_heads(self.residue_value_projection(residue_base))
         atom_value = self._split_heads(self.atom_value_projection(atom_base))
-        atom_context = torch.matmul(atom_to_residue_heads, residue_value)
-        residue_context = torch.matmul(residue_to_atom_heads, atom_value)
+        atom_context = torch.matmul(atom_to_residue_heads.to(residue_value.dtype), residue_value)
+        residue_context = torch.matmul(residue_to_atom_heads.to(atom_value.dtype), atom_value)
         atom_context = atom_context.transpose(1, 2).reshape_as(atom_states)
         residue_context = residue_context.transpose(1, 2).reshape_as(residue_states)
         atom_delta = self.atom_output_projection(atom_context)
@@ -133,6 +137,8 @@ class AlignedBidirectionalCoAttention(nn.Module):
         residue_delta = residue_gate * residue_delta * residue_valid.unsqueeze(-1)
         atom_updated = self.atom_output_norm(atom_states + self.dropout(atom_delta))
         residue_updated = self.residue_output_norm(residue_states + self.dropout(residue_delta))
+        # Preserve FP32 for mutual evidence, its square root, and pooling
+        # weights; only the value matmuls above use the model's compute dtype.
         atom_to_residue = atom_to_residue_heads.mean(dim=1)
         residue_to_atom = residue_to_atom_heads.mean(dim=1)
         pair_attention = torch.sqrt((atom_to_residue * residue_to_atom.transpose(1, 2)).clamp_min(1e-12))
@@ -194,7 +200,7 @@ class TargetSequenceTransformerEncoder(nn.Module):
         vector = masked_mean(states, valid)
         return (states, vector) if return_states else vector
 
-class PharMacyDTA(nn.Module):
+class PharMDTA(nn.Module):
     """Four-vector affinity prediction with the complete manuscript model."""
 
     def __init__(self, *, vocab_size, n_embd=384, n_head=4, dropout=0.1, affinity_dropout=0.1, encoder_layers=8, molecule_encoder_layers=8, molecule_transformer_heads=8, protein_transformer_layers=4, protein_transformer_heads=8, cross_attention_layers=3, pocket_in_dim=2568, pocket_node_dim=128, pocket_input_proj_dim=384, pocket_hidden_dim=384, pocket_layers=3, pocket_residue_feature_dim=28, pocket_transformer_heads=4, protein_cached_embedding_dim=2560, pad_id=0):

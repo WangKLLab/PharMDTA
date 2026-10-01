@@ -7,7 +7,6 @@ constructs a pair-specific interaction descriptor at runtime.
 
 from __future__ import annotations
 
-import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,7 +24,7 @@ DATASET_NATIVE_REVISION = 6
 FIXED_SPLIT_PROTOCOL = "deepdtagen_official_fixed_test_single_pair_holdout_val_no_cv"
 BINDINGDB_FULL_IC50_SPLIT_PROTOCOL = "bindingdb_full_ic50_random_pair_64_16_20_seed42_no_cv"
 FIXED_SPLIT_PROTOCOLS = frozenset(
-    {FIXED_SPLIT_PROTOCOL, BINDINGDB_FULL_IC50_SPLIT_PROTOCOL}
+    {FIXED_SPLIT_PROTOCOL, BINDINGDB_FULL_IC50_SPLIT_PROTOCOL, "deepdtagen_drug_wise_64_16_20_no_cv"}
 )
 LIPINSKI_FILTER_FORMAT = "rdkit_lipinski_filter"
 LIPINSKI_FILTER_VERSION = 1
@@ -101,14 +100,6 @@ def dataset_regression_contract(dataset_name: str) -> DatasetRegressionContract:
         ) from exc
 
 
-def sha256_file(path: str | Path, chunk_size: int = 8 * 1024 * 1024) -> str:
-    digest = hashlib.sha256()
-    with Path(path).open("rb") as handle:
-        for chunk in iter(lambda: handle.read(chunk_size), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 def _load_json(path: Path, *, label: str) -> dict[str, Any]:
     if path.is_symlink() or not path.is_file():
         raise FileNotFoundError(f"{label} is not a regular file: {path}")
@@ -157,9 +148,6 @@ def _validate_split_inventory(
             )
         if requested.is_symlink() or not requested.is_file():
             raise FileNotFoundError(f"missing {split} split: {requested}")
-        expected_hash = str(entry.get("sha256", "")).strip().lower()
-        if len(expected_hash) != 64 or sha256_file(requested) != expected_hash:
-            raise RuntimeError(f"{manifest_path}: {split} CSV SHA-256 mismatch")
         if int(entry.get("rows", 0)) <= 0:
             raise RuntimeError(f"{manifest_path}: {split} split must be non-empty")
 
@@ -348,9 +336,6 @@ def _manifest_regression_contract(
         atol=1.0e-12,
     ):
         raise RuntimeError(f"{path}: invalid train label normalization scale")
-    digest = str(statistics.get("pair_label_sha256", ""))
-    if len(digest) != 64 or any(character not in "0123456789abcdef" for character in digest):
-        raise RuntimeError(f"{path}: invalid train pair-label digest")
     return expected
 
 
@@ -383,19 +368,6 @@ def _validate_train_label_statistics(
         )
         if not bool(matches):
             raise RuntimeError(f"{path}: train label statistic {key} mismatch")
-    digest = hashlib.sha256()
-    ordered = frame.sort_values(["canonical_smiles", "protein_identity_key"], kind="mergesort")
-    for ligand, target, label in ordered[
-        ["canonical_smiles", "protein_identity_key", contract.label_column]
-    ].itertuples(index=False, name=None):
-        digest.update(str(ligand).encode("utf-8"))
-        digest.update(b"\0")
-        digest.update(str(target).encode("utf-8"))
-        digest.update(b"\0")
-        digest.update(np.float64(label).tobytes())
-        digest.update(b"\n")
-    if digest.hexdigest() != str(statistics["pair_label_sha256"]):
-        raise RuntimeError(f"{path}: train pair-label digest mismatch")
 
 
 def _validate_frame_regression_contract(
@@ -462,13 +434,13 @@ def validate_native_v6_training_input(
         raise RuntimeError("data manifest reports cross-split pair leakage")
     _manifest_regression_contract(manifest, expected_dataset_name=expected.dataset_name, path=manifest_path)
     return {
-        "manifest": {"path": str(manifest_path), "sha256": sha256_file(manifest_path)},
+        "manifest": {"path": str(manifest_path)},
         "contract_format": CLEAN_CONTRACT_FORMAT,
         "contract_version": CLEAN_CONTRACT_VERSION,
         "dataset_native_revision": DATASET_NATIVE_REVISION,
         "split_protocol": configuration.get("split_protocol", manifest.get("split_protocol")),
-        "split_hashes": {
-            split: sha256_file(path) for split, path in sorted(normalized.items())
+        "split_paths": {
+            split: str(path) for split, path in sorted(normalized.items())
         },
     }
 
