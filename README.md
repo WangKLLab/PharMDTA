@@ -48,8 +48,6 @@ Direct dependencies are pinned; transitive dependencies are resolved by the pack
 
 ## Data and feature requirements
 
-Local split CSVs and generated feature artifacts are excluded from Git and are not bundled with this repository. Supply the benchmark split files described by the dataset manifests before generating features or starting training.
-
 Training requires four inputs:
 
 | Argument | Required input |
@@ -59,7 +57,7 @@ Training requires four inputs:
 | `--component-sequences` | Protein component sequence lookup CSV; the repository provides `data/component_sequences.csv`. |
 | `--esmc6b-embeddings` | Precomputed ESM-C-6B residue embeddings keyed by target identity. |
 
-The dataset manifests define fixed drug-wise splits with seed 42. Unique canonical SMILES are assigned to training, validation, and test sets at approximately 64%, 16%, and 20%, respectively. Ligands are disjoint across the three sets, while targets may overlap. These are single held-out splits without cross-validation. The manifest in each dataset directory records the exact protocol, row counts, label statistics.
+Unique canonical SMILES are assigned to training, validation, and test sets at approximately 64%, 16%, and 20%, respectively. Ligands are disjoint across the three sets, while targets may overlap. These are single held-out splits without cross-validation.
 
 ### Affinity labels
 
@@ -193,8 +191,6 @@ python -m model.evaluate \
 Use `--split val` for validation or the KIBA checkpoint path for KIBA evaluation. Keep the checkpoint together with its run-level `config.json`, which supplies the configuration and input paths. If inputs have moved, override their locations with `--data-dir`, `--pocket-contract`, `--component-sequences`, and `--esmc6b-embeddings`. The output directory must be empty or nonexistent.
 
 Evaluation writes `predictions.csv` and `metrics.json`. Reported metrics include MSE, RMSE, MAE, Pearson correlation, Spearman correlation, concordance index (CI), R², and residual standard deviation (SD), all computed on the original dataset label scale. CI excludes tied labels and assigns half credit to tied predictions.
-
-Add `--attention-limit 10` to export atom–residue attention matrices and top-15 atom and residue importance summaries for the first ten retained split samples. These outputs describe the model's attention along the prediction path and support inspection of individual predictions.
 
 ## Run artifacts
 
