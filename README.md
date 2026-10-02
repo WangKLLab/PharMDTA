@@ -102,14 +102,6 @@ The pipeline reruns fpocket and DSSP on sequence-aligned protein-only structures
 
 Progress and logs are saved under `data/features/logs/`. The fpocket timeout defaults to 1,800 seconds to accommodate large protein structures. The final pocket contract is written after all graph features are attached and is followed by runtime graph validation. Unavailable pockets are explicitly marked for exclusion by the training loader. Rerunning the scripts resumes completed outputs; use a fresh output directory for a new generation run.
 
-After the pipeline finishes, validate all six dataset loaders and run an untrained-model forward smoke check:
-
-```bash
-python scripts/validate_generated_features.py --device cuda:0
-```
-
-The validation report is saved to `data/features/validation.json`. This checks input compatibility and finite outputs; it does not evaluate prediction accuracy.
-
 ## Training
 
 ### BindingDB
