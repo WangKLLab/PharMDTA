@@ -48,6 +48,11 @@ Direct dependencies are pinned; transitive dependencies are resolved by the pack
 
 ## Data and feature requirements
 
+Dataset download links:
+
+- [BindingDB](https://www.bindingdb.org/rwd/bind/chemsearch/marvin/Download.jsp)
+- [KIBA (DeepDTA data repository)](https://github.com/hkmztrk/DeepDTA/tree/master/data/kiba)
+
 Training requires four inputs:
 
 | Argument | Required input |
