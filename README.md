@@ -221,21 +221,3 @@ Add `--attention-limit 10` to export atom–residue attention matrices and top-1
 | `training_stop.json` | Completed epoch count and early-stopping status. |
 
 For reproducible comparisons, retain the configurations, manifests, feature artifacts, and run outputs together, and record the hardware and software environment used for each experiment. Actual checkpoint selection is determined by validation performance during the run.
-
-## Inspection and reporting
-
-Inspect the configuration and model size without loading training data or feature caches:
-
-```bash
-python scripts/train.py --config configs/bindingdb.json --dry-run
-python scripts/model_summary.py --config configs/bindingdb.json
-```
-
-Generate dataset and pocket summaries for experimental reporting:
-
-```bash
-python scripts/dataset_report.py --data-dir data/bindingdb --format markdown
-python scripts/pocket_report.py \
-  --pocket-contract data/features/pockets/contract.json \
-  --format markdown
-```
