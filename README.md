@@ -68,8 +68,6 @@ The dataset manifests define fixed drug-wise splits with seed 42. Unique canonic
 | BindingDB | IC50 | `pAffinity`: pIC50 = −log10(IC50 [M]) = 9 − log10(IC50 [nM]). |
 | KIBA | Integrated KIBA score | `kiba_score_raw`: the released score without transformation. |
 
-Inputs must satisfy the repository's dataset contracts, including source-data revision 6 and the recorded Lipinski-filter audit. Training reads the curated splits without changing labels or reassigning samples.
-
 ### Precomputed features
 
 Pocket graphs are target-level, ligand-independent inputs. Their contract must specify sequence alignment and the required feature schema. The default configurations use 2,568-dimensional pocket node inputs and 28-dimensional residue physicochemical features. Pairs with pockets declared unavailable are excluded, and the training and validation exclusion counts are recorded in the run configuration.
