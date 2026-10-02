@@ -13,7 +13,7 @@ import numpy as np
 SMILES_VOCAB_PATH = Path(__file__).resolve().parent / "assets" / "smiles_regex_vocab.json"
 MAX_SMILES_TOKENS = 128
 _PATTERN = re.compile(
-    r"(\[[^\]]+]|Br?|Cl?|N|O|S|P|F|I|b|c|n|o|s|p|\(|\)|\.|=|#|-|\+|\\\\|/|:|~|@|\?|>|\*|\$|%[0-9]{2}|[0-9])"
+    r"(\[[^\]]+]|Br?|Cl?|N|O|S|P|F|I|b|c|n|o|s|p|\(|\)|\.|=|#|-|\+|\\|/|:|~|@|\?|>|\*|\$|%[0-9]{2}|[0-9])"
 )
 _SPECIAL_IDS = {"<s>": 0, "<pad>": 1, "</s>": 2, "<unk>": 3, "<mask>": 4}
 _ATOM_TOKENS = frozenset({"B", "C", "N", "O", "S", "P", "F", "I", "Br", "Cl", "b", "c", "n", "o", "s", "p"})
@@ -102,4 +102,3 @@ def encode_smiles_regex(
     output[: len(ids)] = np.asarray(ids, dtype=np.uint16)
     mask[: len(ids)] = 1
     return output, mask, len(tokens), unknown
-
