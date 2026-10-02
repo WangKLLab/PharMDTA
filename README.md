@@ -196,19 +196,3 @@ python -m model.evaluate \
 Use `--split val` for validation or the KIBA checkpoint path for KIBA evaluation. Keep the checkpoint together with its run-level `config.json`, which supplies the configuration and input paths. If inputs have moved, override their locations with `--data-dir`, `--pocket-contract`, `--component-sequences`, and `--esmc6b-embeddings`. The output directory must be empty or nonexistent.
 
 Evaluation writes `predictions.csv` and `metrics.json`. Reported metrics include MSE, RMSE, MAE, Pearson correlation, Spearman correlation, concordance index (CI), R², and residual standard deviation (SD), all computed on the original dataset label scale. CI excludes tied labels and assigns half credit to tied predictions.
-
-## Run artifacts
-
-| Artifact | Description |
-| --- | --- |
-| `best.pt` | Checkpoint with the lowest validation standardized MSE. |
-| `last.pt` | Latest checkpoint, including states needed to resume training. |
-| `config.json` | Run configuration, resolved input paths, and training label statistics. |
-| `data_contract.json` | Input validation receipt and input paths. |
-| `history.csv` | Per-epoch training loss, validation metrics, and learning rate. |
-| `final_metrics.json` | Best epoch and validation/test metrics for the selected model. |
-| `predictions/val_best.csv` | Validation predictions from the best checkpoint. |
-| `predictions/test_best.csv` | Test predictions from the best checkpoint. |
-| `training_stop.json` | Completed epoch count and early-stopping status. |
-
-For reproducible comparisons, retain the configurations, manifests, feature artifacts, and run outputs together, and record the hardware and software environment used for each experiment. Actual checkpoint selection is determined by validation performance during the run.
