@@ -14,6 +14,9 @@ runs/
 # Keep large training splits local; include the component sequence catalog.
 /data/bindingdb/splits/
 /data/kiba/splits/
+/data/*_pair/
+/data/*_pair_restored/
+/data/*_drug_wise/
 
 # Generated offline features and process logs.
 /data/features/

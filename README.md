@@ -62,7 +62,44 @@ Training requires four inputs:
 | `--component-sequences` | Protein component sequence lookup CSV; the repository provides `data/component_sequences.csv`. |
 | `--esmc6b-embeddings` | Precomputed ESM-C-6B residue embeddings keyed by target identity. |
 
-Unique canonical SMILES are assigned to training, validation, and test sets at approximately 64%, 16%, and 20%, respectively. Ligands are disjoint across the three sets, while targets may overlap. These are single held-out splits without cross-validation.
+### Dataset splits
+
+Two split methods are supported for both BindingDB and KIBA:
+
+| Method | Assignment | Evaluation setting |
+| --- | --- | --- |
+| `pair` | Preserve the original curated train/validation/test pair assignments. Drugs and targets may occur in multiple sets; each drug–target pair belongs to one set. | Randomly held-out pairs, as used in the manuscript. |
+| `drug-wise` | Assign unique canonical SMILES to train/validation/test at approximately 64%/16%/20%, using seed 42 by default. Drugs are disjoint; targets may overlap. | Generalization to unseen drugs. |
+
+Prepare each method in its own dataset directory. Replace `/path/to/curated/kiba` with the directory containing the original curated KIBA manifest and splits:
+
+```bash
+python scripts/prepare_splits.py \
+  --data-dir /path/to/curated/kiba \
+  --output-dir data/kiba_pair \
+  --method pair
+
+python scripts/prepare_splits.py \
+  --data-dir /path/to/curated/kiba \
+  --output-dir data/kiba_drug_wise \
+  --method drug-wise \
+  --seed 42
+```
+
+For BindingDB, use the curated BindingDB source and `data/bindingdb_pair` or `data/bindingdb_drug_wise` as the output directory. Output directories must be new; source data and labels remain unchanged. Pair mode copies the original CSV files without reshuffling. Drug-wise mode updates split membership and training-label statistics and saves the original splits and manifest inside the output directory.
+
+To restore the original pair split from a prepared drug-wise directory:
+
+```bash
+python scripts/prepare_splits.py \
+  --data-dir data/kiba_drug_wise \
+  --output-dir data/kiba_pair_restored \
+  --method pair
+```
+
+For a legacy drug-wise directory with `original_pair_splits/` but no saved original manifest, add `--source-manifest /path/to/original/manifest.json`.
+
+Select the prepared directory with the training command's `--data-dir`, and give each method a distinct `--run-name`, such as `kiba_pair_seed42` or `kiba_drug_wise_seed42`. Pocket graphs and ESM-C caches can be shared when target identities and sequences match. Both methods use fixed held-out sets without cross-validation; their metrics measure different prediction settings and should be reported separately.
 
 ### Affinity labels
 
