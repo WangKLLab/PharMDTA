@@ -4,23 +4,6 @@ PharMDTA is a multimodal framework for drug–target binding affinity prediction
 
 The model integrates pharmacophore-aware molecular representations, frozen ESM-C-6B protein residue embeddings, and sequence-aligned binding-pocket graphs. Bidirectional atom–residue co-attention models drug–target interactions and provides attention-based evidence alongside affinity predictions.
 
-## Repository structure
-
-```text
-PharMDTA/
-├── configs/
-│   ├── bindingdb.json           # BindingDB model and training settings
-│   └── kiba.json                # KIBA model and training settings
-├── data/
-│   ├── component_sequences.csv  # Protein component sequence lookup
-│   ├── bindingdb/               # Dataset splits and manifest
-│   └── kiba/                    # Dataset splits and manifest
-├── scripts/                     # Training entry points and reporting utilities
-├── src/model/                   # Model, input validation, training, and evaluation
-├── environment.yml             # Conda environment specification
-└── README.md
-```
-
 ## Installation
 
 Run the following commands from the repository root:
