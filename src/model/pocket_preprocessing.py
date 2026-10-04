@@ -15,6 +15,8 @@ from torch_geometric.data import Data
 from .pocket_data import RESIDUE_PHYSCHEM_DIM, RESIDUE_PHYSCHEM_SCHEMA
 from .residue_features import residue_physchem_vector
 
+ResidueKey = tuple[str, int, str]
+
 POCKET_FEATURE_DIM = 2568
 
 DSSP_DIM = 8
@@ -58,8 +60,9 @@ DSSP_MAP = {
 
 POCKET_FILE_RE = re.compile(r"pocket(\d+)_atm\.pdb$")
 
-def _pdb_residue_key(line: str) -> tuple[str, int]:
-    return line[21:22].strip(), int(line[22:26].strip())
+def _pdb_residue_key(line: str) -> ResidueKey:
+    """Identify a PDB residue by chain, sequence number, and insertion code."""
+    return line[21:22].strip(), int(line[22:26].strip()), line[26:27].strip()
 
 def _normalize_sequence(sequence: str) -> str:
     return "".join(
@@ -105,8 +108,8 @@ def _alignment_index_map(
     identity = matches / max(1, len(mapping))
     return mapping, float(coverage), float(identity)
 
-def parse_residues(path: Path) -> dict[tuple[str, int], dict[str, Any]]:
-    residues: dict[tuple[str, int], dict[str, Any]] = {}
+def parse_residues(path: Path) -> dict[ResidueKey, dict[str, Any]]:
+    residues: dict[ResidueKey, dict[str, Any]] = {}
     with path.open("r", encoding="utf-8", errors="ignore") as handle:
         for line in handle:
             if not line.startswith("ATOM"):
@@ -137,8 +140,8 @@ def parse_residues(path: Path) -> dict[tuple[str, int], dict[str, Any]]:
         residue["coords"] = np.asarray(residue["coords"], dtype=np.float32)
     return residues
 
-def parse_pocket_residue_keys(path: Path) -> set[tuple[str, int]]:
-    keys: set[tuple[str, int]] = set()
+def parse_pocket_residue_keys(path: Path) -> set[ResidueKey]:
+    keys: set[ResidueKey] = set()
     with path.open("r", encoding="utf-8", errors="ignore") as handle:
         for line in handle:
             if not line.startswith("ATOM"):
@@ -151,8 +154,8 @@ def parse_pocket_residue_keys(path: Path) -> set[tuple[str, int]]:
                 continue
     return keys
 
-def parse_dssp(path: Path) -> dict[tuple[str, int], str]:
-    result: dict[tuple[str, int], str] = {}
+def parse_dssp(path: Path) -> dict[ResidueKey, str]:
+    result: dict[ResidueKey, str] = {}
     if not path.is_file():
         return result
     started = False
@@ -166,7 +169,8 @@ def parse_dssp(path: Path) -> dict[tuple[str, int], str]:
             try:
                 number = int(line[5:10].strip())
                 chain = line[11:12].strip()
-                result[(chain, number)] = line[16:17]
+                insertion_code = line[10:11].strip()
+                result[(chain, number, insertion_code)] = line[16:17]
             except (TypeError, ValueError):
                 continue
     return result
@@ -191,15 +195,15 @@ def parse_fpocket_scores(path: Path) -> dict[int, float]:
 
 def build_graph(
     *,
-    residue_keys: set[tuple[str, int]],
-    residues: dict[tuple[str, int], dict[str, Any]],
-    residue_to_sequence: dict[tuple[str, int], int],
+    residue_keys: set[ResidueKey],
+    residues: dict[ResidueKey, dict[str, Any]],
+    residue_to_sequence: dict[ResidueKey, int],
     embedding: np.ndarray,
-    dssp: dict[tuple[str, int], str],
+    dssp: dict[ResidueKey, str],
     max_sequence_index: int,
     edge_distance_a: float,
 ) -> Data:
-    nodes: list[tuple[tuple[str, int], int]] = []
+    nodes: list[tuple[ResidueKey, int]] = []
     for key in sorted(residue_keys):
         sequence_index = residue_to_sequence.get(key)
         if sequence_index is None or sequence_index > int(max_sequence_index):
@@ -233,7 +237,12 @@ def build_graph(
             residue_physchem_vector(AMINO_ACIDS[residue["res_name"]])
         )
         coordinates.append(coordinate.astype(np.float32))
-        residue_labels.append(f"{key[0]}:{key[1]}")
+        # Keep legacy labels for blank insertion codes; delimit nonblank codes
+        # so even numeric insertion codes cannot collide with residue numbers.
+        label = f"{key[0]}:{key[1]}"
+        if key[2]:
+            label += f":{key[2]}"
+        residue_labels.append(label)
 
     x = torch.from_numpy(np.stack(features)).to(dtype=torch.float32)
     residue_physchem = torch.from_numpy(
@@ -268,12 +277,12 @@ def build_graph(
     return graph
 
 def _independent_chain_map(
-    residues: dict[tuple[str, int], dict[str, Any]], sequence: str
-) -> tuple[dict[tuple[str, int], int], dict[str, tuple[float, float]]]:
-    by_chain: dict[str, list[tuple[int, str]]] = defaultdict(list)
-    for (chain, number), residue in residues.items():
-        by_chain[chain].append((number, AMINO_ACIDS[residue["res_name"]]))
-    mapping: dict[tuple[str, int], int] = {}
+    residues: dict[ResidueKey, dict[str, Any]], sequence: str
+) -> tuple[dict[ResidueKey, int], dict[str, tuple[float, float]]]:
+    by_chain: dict[str, list[tuple[ResidueKey, str]]] = defaultdict(list)
+    for key, residue in residues.items():
+        by_chain[key[0]].append((key, AMINO_ACIDS[residue["res_name"]]))
+    mapping: dict[ResidueKey, int] = {}
     quality: dict[str, tuple[float, float]] = {}
     for chain, values in by_chain.items():
         values.sort()
@@ -283,15 +292,24 @@ def _independent_chain_map(
         quality[chain] = (float(coverage), float(identity))
         if coverage >= 0.60 and identity >= 0.65:
             for observed, sequence_index in local.items():
-                mapping[(chain, values[int(observed)][0])] = int(sequence_index)
+                mapping[values[int(observed)][0]] = int(sequence_index)
     return mapping, quality
 
-def _labels_to_indices(labels: list[str], mapping: dict[tuple[str, int], int]) -> list[int | None]:
+def _labels_to_indices(labels: list[str], mapping: dict[ResidueKey, int]) -> list[int | None]:
     result: list[int | None] = []
     for label in labels:
         try:
-            chain, number = str(label).split(":", 1)
-            result.append(mapping.get((chain, int(number))))
+            parts = str(label).split(":")
+            if len(parts) == 2:
+                chain, number = parts
+                insertion_code = ""
+            elif len(parts) == 3:
+                chain, number, insertion_code = parts
+                if len(insertion_code) > 1:
+                    raise ValueError("invalid PDB insertion code")
+            else:
+                raise ValueError("invalid residue label")
+            result.append(mapping.get((chain, int(number), insertion_code)))
         except (TypeError, ValueError):
             result.append(None)
     return result
