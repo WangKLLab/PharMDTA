@@ -101,7 +101,6 @@ python scripts/train.py \
   --output-dir runs \
   --run-name kiba_pair_seed42 \
   --device cuda \
-  --micro-batch-size 16 \
   --num-workers 4
 ```
 
@@ -164,7 +163,6 @@ python scripts/train.py \
   --esmc6b-embeddings data/features/esmc6b \
   --output-dir runs \
   --device cuda \
-  --micro-batch-size 16 \
   --num-workers 4
 ```
 
@@ -180,7 +178,6 @@ python scripts/train.py \
   --esmc6b-embeddings data/features/esmc6b \
   --output-dir runs \
   --device cuda \
-  --micro-batch-size 16 \
   --num-workers 4
 ```
 
@@ -238,8 +235,7 @@ python -m model.evaluate \
   --checkpoint runs/bindingdb_drug_wise_seed42/best.pt \
   --split test \
   --output-dir results/bindingdb_drug_wise_test \
-  --device cuda \
-  --micro-batch-size 16
+  --device cuda
 ```
 
 Use `--split val` for validation or the KIBA checkpoint path for KIBA evaluation. Keep the checkpoint together with its run-level `config.json`, which supplies the configuration and input paths. If inputs have moved, override their locations with `--data-dir`, `--pocket-contract`, `--component-sequences`, and `--esmc6b-embeddings`. The output directory must be empty or nonexistent.
