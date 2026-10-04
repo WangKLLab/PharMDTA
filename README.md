@@ -37,11 +37,10 @@ The specification targets Linux with CUDA 12.4 PyTorch wheels. GPU training requ
 
 The graph operations used here do not require the optional `torch-scatter`, `torch-sparse`, `torch-cluster`, or `torch-spline-conv` extensions; see the [PyTorch Geometric installation guide](https://pytorch-geometric.readthedocs.io/en/2.7.0/install/installation.html). ESM-C and pocket preprocessing tools are outside this runtime environment because the repository consumes their precomputed outputs.
 
-After installation, check dependency consistency and run the attention regression tests:
+After installation, check dependency consistency:
 
 ```bash
 python -m pip check
-python -m unittest discover -s tests -v
 ```
 
 Direct dependencies are pinned; transitive dependencies are resolved by the package managers. Archive `conda list --explicit` and `python -m pip freeze` with published experiment results to record the exact installed environment.
