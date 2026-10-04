@@ -13,8 +13,8 @@ PharMDTA/
 │   └── kiba.json                # KIBA model and training settings
 ├── data/
 │   ├── component_sequences.csv  # Protein component sequence lookup
-│   ├── bindingdb/               # Curated splits and dataset manifest
-│   └── kiba/                    # Curated splits and dataset manifest
+│   ├── bindingdb/               # Dataset splits and manifest
+│   └── kiba/                    # Dataset splits and manifest
 ├── scripts/                     # Training entry points and reporting utilities
 ├── src/model/                   # Model, input validation, training, and evaluation
 ├── environment.yml             # Conda environment specification
@@ -57,7 +57,7 @@ Training requires four inputs:
 
 | Argument | Required input |
 | --- | --- |
-| `--data-dir` | Curated dataset directory containing `manifest.json` and `splits/{train,val,test}.csv`. |
+| `--data-dir` | Dataset directory containing `manifest.json` and `splits/{train,val,test}.csv`. |
 | `--pocket-contract` | A sequence-aligned version-4 target-pocket contract JSON and the graph files it references. |
 | `--component-sequences` | Protein component sequence lookup CSV; the repository provides `data/component_sequences.csv`. |
 | `--esmc6b-embeddings` | Precomputed ESM-C-6B residue embeddings keyed by target identity. |
@@ -68,27 +68,27 @@ Two split methods are supported for both BindingDB and KIBA:
 
 | Method | Assignment | Evaluation setting |
 | --- | --- | --- |
-| `pair` | Preserve the original curated train/validation/test pair assignments. Drugs and targets may occur in multiple sets; each drug–target pair belongs to one set. | Randomly held-out pairs, as used in the manuscript. |
+| `pair` | Use train/validation/test drug–target pair assignments. Drugs and targets may occur in multiple sets; each drug–target pair belongs to one set. | Randomly held-out pairs. |
 | `drug-wise` | Assign unique canonical SMILES to train/validation/test at approximately 64%/16%/20%, using seed 42 by default. Drugs are disjoint; targets may overlap. | Generalization to unseen drugs. |
 
-Prepare each method in its own dataset directory. Replace `/path/to/curated/kiba` with the directory containing the original curated KIBA manifest and splits:
+Prepare each method in its own dataset directory. Replace `/path/to/datasets/kiba` with the directory containing the KIBA manifest and splits:
 
 ```bash
 python scripts/prepare_splits.py \
-  --data-dir /path/to/curated/kiba \
+  --data-dir /path/to/datasets/kiba \
   --output-dir data/kiba_pair \
   --method pair
 
 python scripts/prepare_splits.py \
-  --data-dir /path/to/curated/kiba \
+  --data-dir /path/to/datasets/kiba \
   --output-dir data/kiba_drug_wise \
   --method drug-wise \
   --seed 42
 ```
 
-For BindingDB, use the curated BindingDB source and `data/bindingdb_pair` or `data/bindingdb_drug_wise` as the output directory. Output directories must be new; source data and labels remain unchanged. Pair mode copies the original CSV files without reshuffling. Drug-wise mode updates split membership and training-label statistics and saves the original splits and manifest inside the output directory.
+For BindingDB, use the BindingDB dataset and `data/bindingdb_pair` or `data/bindingdb_drug_wise` as the output directory. Output directories must be new; source data and labels remain unchanged. Pair mode copies the supplied CSV files without reshuffling. Drug-wise mode updates split membership and training-label statistics and saves the input splits and manifest inside the output directory.
 
-To restore the original pair split from a prepared drug-wise directory:
+To recover the pair split from a prepared drug-wise directory:
 
 ```bash
 python scripts/prepare_splits.py \
@@ -97,7 +97,7 @@ python scripts/prepare_splits.py \
   --method pair
 ```
 
-For a legacy drug-wise directory with `original_pair_splits/` but no saved original manifest, add `--source-manifest /path/to/original/manifest.json`.
+For a legacy drug-wise directory, supply its pair-split manifest with `--source-manifest /path/to/pair/manifest.json`.
 
 Select the prepared directory with the training command's `--data-dir`, and give each method a distinct `--run-name`, such as `kiba_pair_seed42` or `kiba_drug_wise_seed42`. Pocket graphs and ESM-C caches can be shared when target identities and sequences match. Both methods use fixed held-out sets without cross-validation; their metrics measure different prediction settings and should be reported separately.
 
@@ -209,7 +209,7 @@ The JSON configurations are the authoritative source for all settings. Training 
 
 ### Resuming a run
 
-Repeat the original training command with the same configuration, inputs, and run directory, adding:
+Repeat the training command with the same configuration, inputs, and run directory, adding:
 
 ```bash
 --resume runs/bindingdb_seed42/last.pt
@@ -232,4 +232,4 @@ python -m model.evaluate \
 
 Use `--split val` for validation or the KIBA checkpoint path for KIBA evaluation. Keep the checkpoint together with its run-level `config.json`, which supplies the configuration and input paths. If inputs have moved, override their locations with `--data-dir`, `--pocket-contract`, `--component-sequences`, and `--esmc6b-embeddings`. The output directory must be empty or nonexistent.
 
-Evaluation writes `predictions.csv` and `metrics.json`. Reported metrics include MSE, RMSE, MAE, Pearson correlation, Spearman correlation, concordance index (CI), R², and residual standard deviation (SD), all computed on the original dataset label scale. CI excludes tied labels and assigns half credit to tied predictions.
+Evaluation writes `predictions.csv` and `metrics.json`. Reported metrics include MSE, RMSE, MAE, Pearson correlation, Spearman correlation, concordance index (CI), R², and residual standard deviation (SD), all computed on the dataset label scale. CI excludes tied labels and assigns half credit to tied predictions.
