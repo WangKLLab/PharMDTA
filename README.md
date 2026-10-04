@@ -46,20 +46,23 @@ Training requires four inputs:
 
 ### Dataset splits
 
-Two split methods are supported for both BindingDB and KIBA:
+Both BindingDB and KIBA support two split methods. **Drug-wise (`drug_wise`) is the default method used in the examples below.** The split preparation command spells this method `--method drug-wise`; dataset directories and run names use `drug_wise`. Training reads the selected dataset's splits and does not repartition data automatically.
 
 | Method | Assignment | Evaluation setting |
 | --- | --- | --- |
-| `pair` | Use train/validation/test drug–target pair assignments. Drugs and targets may occur in multiple sets; each drug–target pair belongs to one set. | Randomly held-out pairs. |
-| `drug-wise` | Assign unique canonical SMILES to train/validation/test at approximately 64%/16%/20%, using seed 42 by default. Drugs are disjoint; targets may overlap. | Generalization to unseen drugs. |
+| `drug-wise` (default) | Group samples by unique canonical SMILES and assign drugs to train/validation/test at approximately 64%/16%/20%, using seed 42. Drugs are disjoint; targets may overlap. The proportions apply to unique drugs, so pair counts may have different proportions. | Generalization to unseen drugs. |
+| `pair` | Use the supplied train/validation/test drug–target pair assignments. Drugs and targets may occur in multiple sets; each drug–target pair belongs to one set. | Prediction for held-out pairs. |
 
-Prepare each method in its own dataset directory. Replace `/path/to/datasets/kiba` with the directory containing the KIBA manifest and splits:
+#### Drug-wise example (default)
+
+Prepare separate drug-wise datasets for BindingDB and KIBA:
 
 ```bash
 python scripts/prepare_splits.py \
-  --data-dir /path/to/datasets/kiba \
-  --output-dir data/kiba_pair \
-  --method pair
+  --data-dir /path/to/datasets/bindingdb \
+  --output-dir data/bindingdb_drug_wise \
+  --method drug-wise \
+  --seed 42
 
 python scripts/prepare_splits.py \
   --data-dir /path/to/datasets/kiba \
@@ -68,20 +71,43 @@ python scripts/prepare_splits.py \
   --seed 42
 ```
 
-For BindingDB, use the BindingDB dataset and `data/bindingdb_pair` or `data/bindingdb_drug_wise` as the output directory. Output directories must be new; source data and labels remain unchanged. Pair mode copies the supplied CSV files without reshuffling. Drug-wise mode updates split membership and training-label statistics and saves the input splits and manifest inside the output directory.
+Use these output directories in the default training commands below.
 
-To recover the pair split from a prepared drug-wise directory:
+#### Pair example
+
+Prepare separate pair datasets for BindingDB and KIBA:
 
 ```bash
 python scripts/prepare_splits.py \
-  --data-dir data/kiba_drug_wise \
-  --output-dir data/kiba_pair_restored \
+  --data-dir /path/to/datasets/bindingdb \
+  --output-dir data/bindingdb_pair \
+  --method pair
+
+python scripts/prepare_splits.py \
+  --data-dir /path/to/datasets/kiba \
+  --output-dir data/kiba_pair \
   --method pair
 ```
 
-For a legacy drug-wise directory, supply its pair-split manifest with `--source-manifest /path/to/pair/manifest.json`.
+Pair mode copies the supplied split assignments without reshuffling. To train KIBA using pair splits:
 
-Select the prepared directory with the training command's `--data-dir`, and give each method a distinct `--run-name`, such as `kiba_pair_seed42` or `kiba_drug_wise_seed42`. Pocket graphs and ESM-C caches can be shared when target identities and sequences match. Both methods use fixed held-out sets without cross-validation; their metrics measure different prediction settings and should be reported separately.
+```bash
+python scripts/train.py \
+  --config configs/kiba.json \
+  --data-dir data/kiba_pair \
+  --pocket-contract data/features/pockets/contract.json \
+  --component-sequences data/component_sequences.csv \
+  --esmc6b-embeddings data/features/esmc6b \
+  --output-dir runs \
+  --run-name kiba_pair_seed42 \
+  --device cuda \
+  --micro-batch-size 16 \
+  --num-workers 4
+```
+
+For BindingDB pair training, use `--config configs/bindingdb.json`, `--data-dir data/bindingdb_pair`, and `--run-name bindingdb_pair_seed42`.
+
+Replace `/path/to/datasets/bindingdb` and `/path/to/datasets/kiba` with your prepared source datasets. Output directories must be new. Drug-wise mode changes split membership and recomputes training-label statistics while retaining all pairs and affinity labels. Pocket graphs and ESM-C caches can be shared between methods when target identities and sequences match. Both methods use fixed held-out sets without cross-validation; report their results separately.
 
 ### Affinity labels
 
@@ -109,7 +135,7 @@ python scripts/prepare_feature_targets.py \
   --source-contract /path/to/source_pocket_contract.json
 ```
 
-Run the complete pipeline on two available GPUs, specifying the Python interpreters for ESM-C inference and pocket preprocessing:
+Run the complete pipeline, specifying the Python interpreters for ESM-C inference and pocket preprocessing:
 
 ```bash
 python scripts/run_feature_generation.py \
@@ -124,12 +150,15 @@ Progress and logs are saved under `data/features/logs/`. The fpocket timeout def
 
 ## Training
 
+The following commands use the default drug-wise datasets prepared above.
+
 ### BindingDB
 
 ```bash
 python scripts/train.py \
   --config configs/bindingdb.json \
-  --data-dir data/bindingdb \
+  --data-dir data/bindingdb_drug_wise \
+  --run-name bindingdb_drug_wise_seed42 \
   --pocket-contract data/features/pockets/contract.json \
   --component-sequences data/component_sequences.csv \
   --esmc6b-embeddings data/features/esmc6b \
@@ -144,7 +173,8 @@ python scripts/train.py \
 ```bash
 python scripts/train.py \
   --config configs/kiba.json \
-  --data-dir data/kiba \
+  --data-dir data/kiba_drug_wise \
+  --run-name kiba_drug_wise_seed42 \
   --pocket-contract data/features/pockets/contract.json \
   --component-sequences data/component_sequences.csv \
   --esmc6b-embeddings data/features/esmc6b \
@@ -154,17 +184,17 @@ python scripts/train.py \
   --num-workers 4
 ```
 
-Replace the feature paths with the locations of the corresponding benchmark artifacts. Default run directories are `runs/bindingdb_seed42/` and `runs/kiba_seed42/`. Use `--run-name` to select a different name. A new run requires an empty or nonexistent run directory.
+Replace the feature paths with the locations of the corresponding benchmark artifacts. These examples write to `runs/bindingdb_drug_wise_seed42/` and `runs/kiba_drug_wise_seed42/`. Use `--run-name` to select a different name. A new run requires an empty or nonexistent run directory.
 
 The shell wrapper provides an alternative entry point:
 
 ```bash
 DATASET=kiba \
-DATA_DIR=data/kiba \
+DATA_DIR=data/kiba_drug_wise \
 POCKET_CONTRACT=data/features/pockets/contract.json \
 COMPONENT_SEQUENCES=data/component_sequences.csv \
 ESMC6B_EMBEDDINGS=data/features/esmc6b \
-bash scripts/train.sh
+bash scripts/train.sh --run-name kiba_drug_wise_seed42
 ```
 
 ### Experimental settings
@@ -194,7 +224,7 @@ The JSON configurations are the authoritative source for all settings. Training 
 Repeat the training command with the same configuration, inputs, and run directory, adding:
 
 ```bash
---resume runs/bindingdb_seed42/last.pt
+--resume runs/bindingdb_drug_wise_seed42/last.pt
 ```
 
 The resume checkpoint must belong to the selected run directory. Resumption restores model, optimizer, scheduler, mixed-precision scaler, and random-number-generator states and checks the saved configuration.
@@ -205,9 +235,9 @@ Evaluate the best checkpoint on the test split:
 
 ```bash
 python -m model.evaluate \
-  --checkpoint runs/bindingdb_seed42/best.pt \
+  --checkpoint runs/bindingdb_drug_wise_seed42/best.pt \
   --split test \
-  --output-dir results/bindingdb_test \
+  --output-dir results/bindingdb_drug_wise_test \
   --device cuda \
   --micro-batch-size 16
 ```
