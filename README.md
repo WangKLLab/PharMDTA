@@ -143,9 +143,9 @@ python scripts/run_feature_generation.py \
   --model-dir /path/to/ESMC-6B
 ```
 
-The pipeline reruns fpocket and DSSP on sequence-aligned protein-only structures and generates ESM-C residue states from the supplied sequences. Full sequences are encoded in non-overlapping chunks of at most 2,046 residues, then stored in FP16 without BOS/EOS rows. Pocket node features combine the corresponding new ESM-C states with eight DSSP features. Structures may originate from holo complexes; retaining only protein records does not establish an apo conformation.
+The pipeline reruns fpocket and DSSP on sequence-aligned protein-only structures and generates ESM-C residue states from the supplied sequences. Full sequences are encoded in non-overlapping chunks of at most 2,046 residues, then stored in FP16 without BOS/EOS rows. Pocket node features combine the corresponding new ESM-C states with eight DSSP features.
 
-Progress and logs are saved under `data/features/logs/`. The fpocket timeout defaults to 1,800 seconds to accommodate large protein structures. The final pocket contract is written after all graph features are attached and is followed by runtime graph validation. Unavailable pockets are explicitly marked for exclusion by the training loader. Rerunning the scripts resumes completed outputs; use a fresh output directory for a new generation run.
+Progress and logs are saved under `data/features/logs/`. The final pocket contract is written after all graph features are attached and is followed by runtime graph validation. Unavailable pockets are explicitly marked for exclusion by the training loader. Rerunning the scripts resumes completed outputs; use a fresh output directory for a new generation run.
 
 ## Training
 
@@ -214,7 +214,7 @@ bash scripts/train.sh --run-name kiba_drug_wise_seed42
 | Early-stopping patience | 10 | 10 |
 | Random seed | 42 | 42 |
 
-The JSON configurations are the authoritative source for all settings. Training minimizes MSE after standardizing labels using the retained training samples. Validation standardized MSE determines checkpoint selection and early stopping. The test split is evaluated after selecting the best checkpoint. Mixed precision is enabled on CUDA, and micro-batching controls memory usage within each configured batch.
+Training minimizes MSE after standardizing labels using the retained training samples. Validation standardized MSE determines checkpoint selection and early stopping. The test split is evaluated after selecting the best checkpoint. Mixed precision is enabled on CUDA, and micro-batching controls memory usage within each configured batch.
 
 ### Resuming a run
 
