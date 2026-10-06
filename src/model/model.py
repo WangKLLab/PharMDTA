@@ -149,8 +149,9 @@ class AlignedBidirectionalCoAttention(nn.Module):
 class TargetSequenceTransformerEncoder(nn.Module):
     """Bidirectional, decoder-free Transformer encoder for protein sequences.
 
-    Protein residues are embedded categorically, projected to the model width,
-    and contextualized by full self-attention with rotary positions.  The
+    Protein residues receive learned categorical embeddings, combined with
+    projected frozen ESM-C states, and are contextualized by full self-attention
+    with rotary positions.  The
     encoder deliberately has no decoder or causal mask.  It can return both
     residue-level states for ligand--target interaction and their masked global
     summary for target fusion.
@@ -172,6 +173,9 @@ class TargetSequenceTransformerEncoder(nn.Module):
         self.heads = int(heads)
         self.layers = int(layers)
         self.cached_embedding_dim = int(cached_embedding_dim)
+        self.token_embedding = nn.Embedding(
+            self.vocab_size, self.output_dim, padding_idx=self.pad_id
+        )
         self.input_projection = nn.Linear(self.cached_embedding_dim, self.output_dim)
         self.input_norm = nn.LayerNorm(self.output_dim)
         self.input_dropout = nn.Dropout(float(dropout))
@@ -192,7 +196,9 @@ class TargetSequenceTransformerEncoder(nn.Module):
         if embeddings.shape[:2] != tokens.shape or embeddings.size(-1) != self.cached_embedding_dim:
             raise ValueError('ESM-C embeddings must align with protein tokens')
         input_states = embeddings.to(dtype=self.input_projection.weight.dtype)
-        states = self.input_dropout(self.input_norm(self.input_projection(input_states)))
+        residue_states = self.token_embedding(tokens.long())
+        fused_states = residue_states + self.input_projection(input_states)
+        states = self.input_dropout(self.input_norm(fused_states))
         key_padding_mask = ~valid
         for block in self.blocks:
             states = block(states, key_padding_mask=key_padding_mask)
